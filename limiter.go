@@ -1,7 +1,8 @@
-package go_rate_limiter
+package main
 
 import (
 	"errors"
+	"sync"
 	"time"
 )
 
@@ -14,13 +15,14 @@ type TokenStore interface {
 }
 
 type MemoryBucket struct {
-	count    int
-	capacity int
+	count int
+	cap   int
+	mu    sync.Mutex
 }
 
-func NewMemoryBucket(count int, capacity int) (*MemoryBucket, error) {
+func NewMemoryBucket(count int, cap int) (*MemoryBucket, error) {
 
-	if capacity <= 0 {
+	if cap <= 0 {
 		return nil, errors.New("Capacity must be a non-zero positive integer.")
 	}
 
@@ -28,19 +30,27 @@ func NewMemoryBucket(count int, capacity int) (*MemoryBucket, error) {
 		return nil, errors.New("count must be a non-negative integer if provided.")
 	}
 
-	bucket := MemoryBucket{count, capacity}
+	if count > cap {
+		return nil, errors.New("count must be less than or equal to capacity if provided.")
+	}
+
+	bucket := MemoryBucket{count: count, cap: cap}
 	return &bucket, nil
 }
 
 func (b *MemoryBucket) AddTokens(count int) {
-	if b.count+count >= b.capacity {
-		b.count = b.capacity
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.count+count >= b.cap {
+		b.count = b.cap
 	} else {
 		b.count += count
 	}
 }
 
 func (b *MemoryBucket) Debit(count int) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	if b.count >= count {
 		b.count -= count
 		return true
@@ -49,37 +59,57 @@ func (b *MemoryBucket) Debit(count int) bool {
 }
 
 func (b *MemoryBucket) Count() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	return b.count
 }
 
 func (b *MemoryBucket) Capacity() int {
-	return b.capacity
+	return b.cap
 }
 
 // ----------------Limiter definition-----------
 type Limiter struct {
-	bucket          TokenStore
-	rate            int       //token refill rate per second
-	lastRequestTime time.Time //not sure what type to use here
+	bucket TokenStore
+	rate   int //token refill rate per second
+	done   chan struct{}
 }
 
 func NewLimiter(rate int, store TokenStore) *Limiter {
-	limiter := Limiter{store, rate, time.Now()}
 
+	done := make(chan struct{})
+	limiter := Limiter{store, rate, done}
+	go limiter.AddTokens()
 	return &limiter
 }
 
-func (l *Limiter) FillBucket() {
-	elapsed := time.Since(l.lastRequestTime).Milliseconds()
-	tokenCount := (elapsed * int64(l.rate)) / 1000
-	l.bucket.AddTokens(int(tokenCount))
-}
+// func (l *Limiter) FillBucket() {
+// 	elapsed := time.Since(l.lastRequestTime).Milliseconds()
+// 	tokenCount := (elapsed * int64(l.rate)) / 1000
+// 	l.bucket.AddTokens(int(tokenCount))
+// }
 
 func (l *Limiter) Allow(size int) bool {
-	l.FillBucket()
+	// l.FillBucket()
 	if l.bucket.Debit(size) {
-		l.lastRequestTime = time.Now()
 		return true
 	}
 	return false
+}
+
+func (l *Limiter) Stop() {
+	close(l.done)
+}
+
+func (l *Limiter) AddTokens() {
+	ticker := time.NewTicker(time.Second / time.Duration(l.rate))
+	for {
+		select {
+		case <-ticker.C:
+			l.bucket.AddTokens(1)
+		case <-l.done:
+			ticker.Stop()
+			return
+		}
+	}
 }
