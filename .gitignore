@@ -33,5 +33,6 @@ go.work.sum
 
 claude.md
 prompt.md
+prompt*.md
 
 *.ignore*

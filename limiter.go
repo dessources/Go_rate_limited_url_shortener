@@ -2,8 +2,17 @@ package main
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"sync"
 	"time"
+)
+
+type LimiterBucketType int
+
+const (
+	InMemory LimiterBucketType = iota
+	Redis
 )
 
 // --------------Token Store Definitions --------------
@@ -75,7 +84,7 @@ type Limiter struct {
 	done   chan struct{}
 }
 
-func NewLimiter(rate int, store TokenStore) *Limiter {
+func newLimiter(rate int, store TokenStore) *Limiter {
 
 	done := make(chan struct{})
 	limiter := Limiter{store, rate, done}
@@ -112,4 +121,21 @@ func (l *Limiter) AddTokens() {
 			return
 		}
 	}
+}
+
+func NewLimiter(t LimiterBucketType, count, cap, rate int) *Limiter {
+	var limiter *Limiter
+
+	switch t {
+	case InMemory:
+		// initialize bucket
+		bucket, err := NewMemoryBucket(count, cap)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		limiter = newLimiter(rate, bucket)
+	}
+
+	return limiter
 }
