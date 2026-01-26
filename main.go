@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -16,79 +15,94 @@ type HTTPContext struct {
 	req *http.Request
 }
 
+type RouteHandler func(ctx HTTPContext)
+type LimiterMiddleware func(http.Handler) http.Handler
+
+type UrlShortenerPayload struct {
+	Original string `json:"original"`
+}
+
+type StorageType int
+
+const (
+	InMemory StorageType = iota
+	Redis
+)
+
+const maxUrlLength = 2048
+
 func main() {
-
-	//create middleware
-	limiter, limiterMiddleware := createLimiterMiddleware()
-
-	//create server
-	mux := http.NewServeMux()
-	mux.Handle("/", limiterMiddleware(asHandler(index)))
-	mux.Handle("POST /shorten", limiterMiddleware(asHandler(shorten)))
-
 	server := &http.Server{
-		Addr:    ":8090",
-		Handler: mux,
+		Addr: ":8090",
 	}
 
 	idleConnsClosed := make(chan struct{})
-	go enableGracefulExit(server, idleConnsClosed, limiter)
+	limiterMiddleware, shorten, retrieve := initialize(idleConnsClosed, server)
+
+	//create server
+	mux := http.NewServeMux()
+	mux.Handle("/", limiterMiddleware(AsHandler(Index)))
+	mux.Handle("GET /{shortUrl}", limiterMiddleware(AsHandler(retrieve)))
+	mux.Handle("POST /shorten", limiterMiddleware(AsHandler(shorten)))
+	server.Handler = mux
 
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
 
+	//wait for graceful shutdown
 	<-idleConnsClosed
 }
 
-func index(ctx HTTPContext) {
-	ctx.w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(ctx.w, "<h1>URL shortener is running!</h1>\n")
+func createUrlShortener() (UrlShortener, RouteHandler, RouteHandler) {
+	s, err := NewUrlShortener(InMemory, 100000, time.Hour)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return s,
+		func(ctx HTTPContext) {
+			ShortenUrl(s, ctx)
+		},
+		func(ctx HTTPContext) {
+			RetrieveUrl(s, ctx)
+		}
 }
 
-func shorten(request HTTPContext) {
-	shortUrl := Shorten()
-	request.w.WriteHeader(http.StatusCreated)
-	fmt.Fprintf(request.w, "Short URL: %s", shortUrl)
-}
-
-func limiteRate(limiter *Limiter, ctx HTTPContext, next http.Handler) {
-	if limiter.Allow(1) {
-		next.ServeHTTP(ctx.w, ctx.req)
+func createLimiterMiddleware() (*Limiter, LimiterMiddleware) {
+	var limiter *Limiter
+	if l, err := NewLimiter(InMemory, 50000, 50000, 10000); err != nil {
+		log.Fatal(err)
 	} else {
-		ctx.w.WriteHeader(http.StatusTooManyRequests)
-		_, _ = ctx.w.Write([]byte("Request rejected by rate limiter"))
-		return
+		limiter = l
 	}
-}
 
-func createLimiterMiddleware() (*Limiter, func(http.Handler) http.Handler) {
-
-	limiter := NewLimiter(InMemory, 50000, 50000, 10000)
 	return limiter, func(next http.Handler) http.Handler {
-		return asHandler(func(ctx HTTPContext) { limiteRate(limiter, ctx, next) })
+		return AsHandler(func(ctx HTTPContext) { LimiteRate(limiter, ctx, next) })
 	}
 }
 
-func asHandler(handler func(request HTTPContext)) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		request := HTTPContext{w, req}
-		handler(request)
-	})
-}
+func initialize(done chan struct{}, server *http.Server) (LimiterMiddleware, RouteHandler, RouteHandler) {
+	//create limiter & middleware
+	limiter, limiterMiddleware := createLimiterMiddleware()
+	//create url shortener
+	shortener, shorten, retrieve := createUrlShortener()
 
-func enableGracefulExit(s *http.Server, done chan struct{}, limiter *Limiter) {
-	sigint := make(chan os.Signal, 1)
-	signal.Notify(sigint, os.Interrupt, syscall.SIGTERM)
-	<-sigint
+	// enable Graceful Exit
+	go func() {
+		sigint := make(chan os.Signal, 1)
+		signal.Notify(sigint, os.Interrupt, syscall.SIGTERM)
+		<-sigint
 
-	//when interrupt received
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	if err := s.Shutdown(ctx); err != nil {
-		log.Printf("HTTP server Shutdown: %v", err)
-	}
-	limiter.Stop()
+		//when interrupt received
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			log.Printf("HTTP server Shutdown: %v", err)
+		}
+		limiter.Stop()
+		shortener.Offline()
+		close(done)
+	}()
 
-	close(done)
+	return limiterMiddleware, shorten, retrieve
 }

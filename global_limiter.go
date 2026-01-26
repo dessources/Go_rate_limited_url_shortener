@@ -2,17 +2,8 @@ package main
 
 import (
 	"errors"
-	"fmt"
-	"os"
 	"sync"
 	"time"
-)
-
-type LimiterBucketType int
-
-const (
-	InMemory LimiterBucketType = iota
-	Redis
 )
 
 // --------------Token Store Definitions --------------
@@ -92,18 +83,8 @@ func newLimiter(rate int, store TokenStore) *Limiter {
 	return &limiter
 }
 
-// func (l *Limiter) FillBucket() {
-// 	elapsed := time.Since(l.lastRequestTime).Milliseconds()
-// 	tokenCount := (elapsed * int64(l.rate)) / 1000
-// 	l.bucket.AddTokens(int(tokenCount))
-// }
-
 func (l *Limiter) Allow(size int) bool {
-	// l.FillBucket()
-	if l.bucket.Debit(size) {
-		return true
-	}
-	return false
+	return l.bucket.Debit(size)
 }
 
 func (l *Limiter) Stop() {
@@ -123,19 +104,23 @@ func (l *Limiter) AddTokens() {
 	}
 }
 
-func NewLimiter(t LimiterBucketType, count, cap, rate int) *Limiter {
+func NewLimiter(storageType StorageType, count, cap, rate int) (*Limiter, error) {
 	var limiter *Limiter
 
-	switch t {
+	switch storageType {
 	case InMemory:
 		// initialize bucket
 		bucket, err := NewMemoryBucket(count, cap)
 		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+			return nil, err
 		}
 		limiter = newLimiter(rate, bucket)
+	case Redis:
+		return nil, errors.New("Redis storage not yet implemented")
+
+	default:
+		return nil, errors.New("Unknown storage type provided.")
 	}
 
-	return limiter
+	return limiter, nil
 }
