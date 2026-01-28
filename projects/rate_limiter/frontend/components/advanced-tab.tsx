@@ -1,4 +1,4 @@
-import { Loader2, AlertTriangle } from "lucide-react";
+import { Loader2, AlertTriangle, TriangleRight, Play } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Dispatch, SetStateAction, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -145,7 +145,7 @@ export default function AdvancedTab() {
                 variant="destructive"
                 onClick={handleStressTest}
                 disabled={stressTestRunning}
-                className="w-full"
+                // className="w-full"
               >
                 {stressTestRunning ? (
                   <>
@@ -154,7 +154,7 @@ export default function AdvancedTab() {
                   </>
                 ) : (
                   <>
-                    <AlertTriangle className="mr-2 h-4 w-4" />
+                    <Play className="mr-2 h-4 w-4" />
                     Run Stress Test
                   </>
                 )}
