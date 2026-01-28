@@ -1,21 +1,15 @@
+"use client";
+
 import { Loader2, CheckCheck, Copy, AlertTriangle } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { TabsContent } from "@/components/ui/tabs";
-import React, { Dispatch, JSX, SetStateAction, useState } from "react";
-
-// interface ShortenerTabProps {
-//   url: string;
-//   setUrl: Dispatch<SetStateAction<string>>;
-//   handleShorten: () => void;
-//   loading: boolean;
-//   shortUrl: string;
-//   handleCopy: () => void;
-//   copied: boolean;
-//   error: string;
-// }
+import { useState } from "react";
+import validateURL from "@/lib/validate-url";
+import getShortUrl from "@/lib/get-short-url";
+import { BASE_URL } from "@/lib/utils";
 
 export default function ShortenerTab() {
   const [url, setUrl] = useState("");
@@ -27,21 +21,26 @@ export default function ShortenerTab() {
   const handleShorten = async () => {
     setLoading(true);
     setError("");
-    setShortUrl("");
 
-    // Simulate API call
-    setTimeout(() => {
-      if (!url || !url.startsWith("http")) {
-        setError("Invalid URL provided");
-        setLoading(false);
-        return;
-      }
-
-      // Mock shortened URL
-      const shortCode = Math.random().toString(36).substring(2, 8);
-      setShortUrl(`http://localhost:8080/s/${shortCode}`);
+    try {
+      validateURL(url);
+    } catch (e: any) {
+      setError(e.message);
       setLoading(false);
-    }, 1000);
+      return;
+    }
+
+    try {
+      const shortUrl = await getShortUrl(url);
+      setShortUrl(
+        `${BASE_URL ? BASE_URL : window.location.origin}/${shortUrl}`,
+      );
+    } catch (e: any) {
+      setError(e.message);
+      setLoading(false);
+      return;
+    }
+    setLoading(false);
   };
 
   const handleCopy = async () => {
@@ -49,6 +48,7 @@ export default function ShortenerTab() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
   return (
     <TabsContent value="shortener" className="mt-30">
       <Card className="mx-auto max-w-2xl">

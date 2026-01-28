@@ -164,7 +164,7 @@ export default function AdvancedTab() {
                 update in real-time. The test takes about one minute to
                 complete.
               </p>
-              <Card className="bg-black/50">
+              <Card className="bg-black">
                 <CardHeader>
                   <CardTitle className="text-sm font-mono text-green-400">
                     Test Output
