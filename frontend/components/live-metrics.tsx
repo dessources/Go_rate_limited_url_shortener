@@ -5,7 +5,6 @@ import { Dispatch, SetStateAction, useEffect, useState } from "react";
 import { BASE_URL } from "@/lib/utils";
 
 import type { Metrics } from "@/app/page";
-import { glob } from "fs";
 
 export interface LiveMetricsProps {
   metrics: Metrics;
@@ -16,17 +15,22 @@ export default function LiveMetrics({ metrics, setMetrics }: LiveMetricsProps) {
   useEffect(() => {
     const evtSource = new EventSource(`${BASE_URL}/api/metrics/stream`);
 
-    evtSource.onmessage = async ({ isTrusted, data }) => {
+    evtSource.onmessage = ({ isTrusted, data }) => {
       if (isTrusted && data) {
         const parsedData: Metrics = JSON.parse(data);
         if (parsedData) setMetrics({ ...parsedData });
       }
     };
 
+    evtSource.onerror = (err) => {
+      console.error("SSE error:", err);
+      // optionally set an error state
+    };
+
     return () => {
       evtSource.close();
     };
-  }, []);
+  }, [setMetrics]);
 
   let rateLoadPercent =
     (metrics.globalTokensUsed / metrics.globalTokenBucketCap) * 100;
