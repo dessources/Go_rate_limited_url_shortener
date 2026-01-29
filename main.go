@@ -31,21 +31,21 @@ func main() {
 	enableGracefulShutdown(idleConnsClosed, server)
 
 	//create global limiter & middleware
-	globalRateLimiter, globalRateLimiterCleanup, err := MakeGlobalRateLimitMiddleware()
+	rateLimitGlobally, globalLimiter, err := MakeGlobalRateLimitMiddleware()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer globalRateLimiterCleanup()
+	defer globalLimiter.Offline()
 
 	//create per client limiter & middleware
-	perClientRateLimiter, perClientRateLimiterCleanup, err := MakePerClientRateLimitMiddleware()
+	rateLimitPerClient, perClientRateLimiter, err := MakePerClientRateLimitMiddleware()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer perClientRateLimiterCleanup()
+	defer perClientRateLimiter.Offline()
 
 	//middleware composer
-	withMiddlewares := ComposeMiddlewares(globalRateLimiter, perClientRateLimiter)
+	withMiddlewares := ComposeMiddlewares(rateLimitGlobally, rateLimitPerClient)
 
 	//url shortener struct
 	shortener, err := NewUrlShortener(InMemory, 100000, time.Hour)
@@ -55,13 +55,14 @@ func main() {
 	defer shortener.Offline()
 
 	//create app struct with methods for api handler logic
-	app := &App{shortener}
+	app := &App{shortener, globalLimiter, perClientRateLimiter}
 
 	//Route handlers
 	mux := http.NewServeMux()
-	mux.Handle("/", globalRateLimiter(MakeIndexHandler()))
-	mux.Handle("GET /{shortUrl}", globalRateLimiter(http.HandlerFunc(app.RetrieveUrl)))
+	mux.Handle("/", rateLimitGlobally(MakeIndexHandler()))
+	mux.Handle("GET /{shortUrl}", rateLimitGlobally(http.HandlerFunc(app.RetrieveUrl)))
 	mux.Handle("POST /api/shorten", withMiddlewares(http.HandlerFunc(app.ShortenUrl)))
+	mux.Handle("GET /api/metrics/stream", rateLimitGlobally(http.HandlerFunc(app.StreamMetrics)))
 	server.Handler = SetupCors(mux)
 
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {

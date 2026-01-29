@@ -9,15 +9,15 @@ import (
 // --------------Token Store Definitions --------------
 type TokenStore interface {
 	Debit(count int) bool
-	Count() int
-	Capacity() int
+	Len() int
+	Cap() int
 	AddTokens(count int)
 }
 
 type MemoryBucket struct {
 	count int
 	cap   int
-	mu    sync.Mutex
+	mu    sync.RWMutex
 }
 
 func NewMemoryBucket(count int, cap int) (*MemoryBucket, error) {
@@ -58,13 +58,15 @@ func (b *MemoryBucket) Debit(count int) bool {
 	return false
 }
 
-func (b *MemoryBucket) Count() int {
+func (b *MemoryBucket) Len() int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.count
 }
 
-func (b *MemoryBucket) Capacity() int {
+func (b *MemoryBucket) Cap() int {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
 	return b.cap
 }
 

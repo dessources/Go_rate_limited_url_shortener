@@ -29,7 +29,7 @@ type UrlMapping struct {
 	createdAt   time.Time
 }
 
-type InMemoryUrlMap struct {
+type InMemoryUrlShortener struct {
 	cap     int
 	len     int
 	mapping map[string]*UrlMapping
@@ -38,7 +38,7 @@ type InMemoryUrlMap struct {
 	mu      sync.RWMutex
 }
 
-func (m *InMemoryUrlMap) AddMapping(original, short string) (bool, error) {
+func (m *InMemoryUrlShortener) AddMapping(original, short string) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.len < m.cap {
@@ -53,7 +53,7 @@ func (m *InMemoryUrlMap) AddMapping(original, short string) (bool, error) {
 	}
 }
 
-func (m *InMemoryUrlMap) RetrieveUrl(s string) (string, error) {
+func (m *InMemoryUrlShortener) RetrieveUrl(s string) (string, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	if mapping := m.mapping[s]; mapping != nil {
@@ -63,7 +63,7 @@ func (m *InMemoryUrlMap) RetrieveUrl(s string) (string, error) {
 	}
 }
 
-func (m *InMemoryUrlMap) RemoveMapping(short string) error {
+func (m *InMemoryUrlShortener) RemoveMapping(short string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.mapping[short] != nil {
@@ -75,7 +75,7 @@ func (m *InMemoryUrlMap) RemoveMapping(short string) error {
 	return errors.New("Url not found")
 }
 
-func (m *InMemoryUrlMap) RegularlyResetMappings() {
+func (m *InMemoryUrlShortener) RegularlyResetMappings() {
 	ticker := time.NewTicker(m.ttl / 2)
 	for {
 		select {
@@ -97,18 +97,18 @@ func (m *InMemoryUrlMap) RegularlyResetMappings() {
 	}
 }
 
-func (m *InMemoryUrlMap) Cap() int {
+func (m *InMemoryUrlShortener) Cap() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.cap
 }
-func (m *InMemoryUrlMap) Len() int {
+func (m *InMemoryUrlShortener) Len() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.len
 }
 
-func (m *InMemoryUrlMap) Offline() {
+func (m *InMemoryUrlShortener) Offline() {
 	close(m.done)
 }
 
@@ -126,7 +126,7 @@ func NewUrlShortener(storageType StorageType, cap int, ttl time.Duration) (UrlSh
 	case InMemory:
 		done := make(chan struct{})
 		mapping := make(map[string]*UrlMapping)
-		urlShortener = &InMemoryUrlMap{cap: cap, done: done, ttl: ttl, mapping: mapping}
+		urlShortener = &InMemoryUrlShortener{cap: cap, done: done, ttl: ttl, mapping: mapping}
 
 		// reset mappings every hour
 		go urlShortener.RegularlyResetMappings()

@@ -3,18 +3,9 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"net/http"
-	"net/url"
-	"strings"
+	"time"
 )
-
-type FileHidingFileSystem struct {
-	http.FileSystem
-}
-type FileHidingFile struct {
-	http.File
-}
 
 type UrlShortenerPayload struct {
 	Original string `json:"original"`
@@ -22,6 +13,13 @@ type UrlShortenerPayload struct {
 
 type ErrorResponse struct {
 	ErrorMessage string `json:"errorMessage"`
+}
+
+type Metrics struct {
+	TokenBucketCap  int `json:"tokenBucketCap"`
+	TokenUsed       int `json:"tokenUsed"`
+	ActiveUsers     int `json:"activeUsers"`
+	CurrentUrlCount int `json:"currentUrlCount"`
 }
 
 //--------- Index route -------------------
@@ -35,16 +33,21 @@ func MakeIndexHandler() http.Handler {
 //------- shortener routes ------------------------
 
 type App struct {
-	shortener UrlShortener
+	shortener        UrlShortener
+	globalLimiter    *GlobalLimiter
+	perClientLimiter *PerClientLimiter
 }
 
-func (f *App) RetrieveUrl(w http.ResponseWriter, r *http.Request) {
+func (app *App) RetrieveUrl(w http.ResponseWriter, r *http.Request) {
 	short := r.PathValue("shortUrl")
 
 	if short != "" {
-		if original, err := f.shortener.RetrieveUrl(short); err != nil {
+		if original, err := app.shortener.RetrieveUrl(short); err != nil {
 
-			// w.WriteHeader(http.StatusNotFound)
+			//setting this header makes Go warn me that ServeFile tries to set
+			//status again to 200 internally but fails silently.
+			//TODO: load 404.html then return text/html with status 404 instead of ServeFile
+			w.WriteHeader(http.StatusNotFound)
 			http.ServeFile(w, r, "frontend/out/404.html")
 
 		} else {
@@ -56,77 +59,84 @@ func (f *App) RetrieveUrl(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func (f *App) ShortenUrl(w http.ResponseWriter, r *http.Request) {
+func (app *App) ShortenUrl(w http.ResponseWriter, r *http.Request) {
 	var payload UrlShortenerPayload
+	errorMessage := ""
 
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
+		errorMessage = "Oops, we couldn't process your request. Please try again later."
+		json.NewEncoder(w).Encode(&ErrorResponse{errorMessage})
 		return
-	}
 
-	if message, ok := ValidateUrl(payload.Original); !ok {
-		http.Error(w, message, http.StatusBadRequest)
-		return
-	}
-
-	if shortUrl, err := Shorten(f.shortener, payload.Original); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	} else if message, ok := ValidateUrl(payload.Original); !ok {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(&ErrorResponse{message})
 		return
 	} else {
 
+		shortUrl, err := Shorten(app.shortener, payload.Original)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			errorMessage = "Something broke on our end. Please try again later."
+			json.NewEncoder(w).Encode(&ErrorResponse{errorMessage})
+			return
+		} else {
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+
+			response := map[string]string{
+				"shortCode": shortUrl,
+			}
+			json.NewEncoder(w).Encode(response)
+		}
+	}
+
+}
+
+func (app *App) StreamMetrics(w http.ResponseWriter, r *http.Request) {
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(&ErrorResponse{"Metrics Streaming is currently unsupported."})
+		return
+	}
 
-		response := map[string]string{
-			"shortCode": shortUrl,
+	w.Header().Add("Content-Type", "text/event-stream")
+	w.Header().Add("Cache-Control", "no-cache")
+	w.Header().Add("Connection", "keep-alive")
+
+	metricsTicker := time.NewTicker(time.Second)
+	defer metricsTicker.Stop()
+	errorCount := 0
+
+	for {
+		select {
+		case <-metricsTicker.C:
+			tokenBucketCap := app.globalLimiter.bucket.Cap()
+			tokenUsed := tokenBucketCap - app.globalLimiter.bucket.Len()
+			activeUsers := app.perClientLimiter.timeLogStore.Len()
+			currentUrlCount := app.shortener.Len()
+
+			jsonData, err := json.Marshal(&Metrics{tokenBucketCap, tokenUsed, activeUsers, currentUrlCount})
+			if err != nil {
+				errorCount++
+				if errorCount > 2 {
+					json.NewEncoder(w).Encode(&ErrorResponse{"Metrics Streaming is currently unsupported."})
+					return
+				}
+			}
+
+			fmt.Fprintf(w, "data: %s\n\n", jsonData)
+			flusher.Flush()
+
+		case <-r.Context().Done():
+			fmt.Println("Client closed connection. Stopping Metrics stream.")
+			return
 		}
-
-		json.NewEncoder(w).Encode(response)
-		// w.WriteHeader(http.StatusCreated)
-		// fmt.Fprintf(w, "Short URL: %s\n", shortUrl)
 	}
 
-}
-
-//------------- handler utils----------------------
-
-func containsTxtFile(name string) bool {
-	parts := strings.Split(name, "/")
-	for _, part := range parts {
-		if strings.HasSuffix(part, ".txt") {
-			return true
-		}
-	}
-	return false
-}
-
-func (fsys FileHidingFileSystem) Open(name string) (http.File, error) {
-	if containsTxtFile(name) {
-		// If txt file, return 403 response
-		return nil, fs.ErrPermission
-	}
-
-	file, err := fsys.FileSystem.Open(name)
-	if err != nil {
-		return nil, err
-	}
-	return FileHidingFile{file}, nil
-}
-
-func ValidateUrl(s string) (string, bool) {
-	if len(s) > maxUrlLength {
-		return fmt.Sprintf("Provided url exceeds max-length of %d", maxUrlLength), false
-	}
-
-	u, err := url.Parse(s)
-
-	if err != nil || u.Host == "" {
-		return "Invalid url provided", false
-	}
-
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return "Invalid protocol provided. Only http:// or https:// allowed", false
-	}
-
-	return "", true
 }
