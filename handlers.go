@@ -16,10 +16,10 @@ type ErrorResponse struct {
 }
 
 type Metrics struct {
-	TokenBucketCap  int `json:"tokenBucketCap"`
-	TokenUsed       int `json:"tokenUsed"`
-	ActiveUsers     int `json:"activeUsers"`
-	CurrentUrlCount int `json:"currentUrlCount"`
+	GlobalTokenBucketCap int `json:"globalTokenBucketCap"`
+	GlobalTokensUsed     int `json:"globalTokensUsed"`
+	ActiveUsers          int `json:"activeUsers"`
+	CurrentUrlCount      int `json:"currentUrlCount"`
 }
 
 //--------- Index route -------------------
@@ -116,12 +116,12 @@ func (app *App) StreamMetrics(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-metricsTicker.C:
-			tokenBucketCap := app.globalLimiter.bucket.Cap()
-			tokenUsed := tokenBucketCap - app.globalLimiter.bucket.Len()
+			globalTokenBucketCap := app.globalLimiter.bucket.Cap()
+			globalTokensUsed := globalTokenBucketCap - app.globalLimiter.bucket.Len()
 			activeUsers := app.perClientLimiter.timeLogStore.Len()
 			currentUrlCount := app.shortener.Len()
 
-			jsonData, err := json.Marshal(&Metrics{tokenBucketCap, tokenUsed, activeUsers, currentUrlCount})
+			jsonData, err := json.Marshal(&Metrics{globalTokenBucketCap, globalTokensUsed, activeUsers, currentUrlCount})
 			if err != nil {
 				errorCount++
 				if errorCount > 2 {
