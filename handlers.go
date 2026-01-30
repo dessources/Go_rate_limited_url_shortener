@@ -41,17 +41,21 @@ type App struct {
 	perClientRateLimiter *PerClientRateLimiter
 }
 
+var page404HTMLText = Load404Page()
+
 func (app *App) RetrieveUrl(w http.ResponseWriter, r *http.Request) {
 	short := r.PathValue("shortUrl")
 
 	if short != "" {
 		if original, err := app.shortener.RetrieveUrl(short); err != nil {
 
-			//setting this header makes Go warn me that ServeFile tries to set
-			//status again to 200 internally but fails silently.
-			//TODO: load 404.html then return text/html with status 404 instead of ServeFile
+			w.Header().Add("Content-Type", "text/html")
 			w.WriteHeader(http.StatusNotFound)
-			http.ServeFile(w, r, "frontend/out/404.html")
+			if page404HTMLText != "" {
+				fmt.Fprintf(w, "%s", page404HTMLText)
+			} else {
+				fmt.Fprintf(w, Cfg.Fallback404HTML)
+			}
 
 		} else {
 			http.Redirect(w, r, original, http.StatusTemporaryRedirect)

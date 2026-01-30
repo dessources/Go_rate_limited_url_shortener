@@ -117,16 +117,17 @@ func EnableGracefulShutdown(done chan struct{}, server *http.Server) {
 
 func StartTestServer() (*http.Server, *App, error) {
 
-	testServer := &http.Server{Addr: ":8091"}
+	testServer := &http.Server{Addr: Cfg.TestServerAddr}
 
 	//create global limiter & middleware
-	rateLimitGlobally, globalRateLimiter, err := MakeGlobalRateLimitMiddleware(InMemory, 50000, 50000, 10000)
+	rateLimitGlobally, globalRateLimiter, err := MakeGlobalRateLimitMiddleware(InMemory, Cfg.GlobalLimiterCount, Cfg.GlobalLimiterCap, Cfg.GlobalLimiterRate)
+
 	if err != nil {
 		return nil, nil, errors.New("Failed to create global rate limiter for stress test.")
 	}
 
 	//create per client limiter & middleware
-	rateLimitPerClient, perClientRateLimiter, err := MakePerClientRateLimitMiddleware(InMemory, 50000, 10, time.Minute)
+	rateLimitPerClient, perClientRateLimiter, err := MakePerClientRateLimitMiddleware(InMemory, Cfg.PerClientLimiterCap, Cfg.PerClientLimiterLimit, Cfg.PerClientLimiterWindow)
 	if err != nil {
 		globalRateLimiter.Offline()
 		return nil, nil, errors.New("Failed to create per client rate limiter for stress test.")
@@ -136,7 +137,7 @@ func StartTestServer() (*http.Server, *App, error) {
 	withMiddlewares := ComposeMiddlewares(rateLimitGlobally, rateLimitPerClient)
 
 	//url shortener struct
-	shortener, err := NewUrlShortener(InMemory, 100000, time.Hour)
+	shortener, err := NewUrlShortener(InMemory, Cfg.ShortenerCap, Cfg.ShortenerTTL)
 	if err != nil {
 		globalRateLimiter.Offline()
 		perClientRateLimiter.Offline()
@@ -150,6 +151,8 @@ func StartTestServer() (*http.Server, *App, error) {
 	mux.Handle("/", rateLimitGlobally(MakeIndexHandler()))
 	mux.Handle("GET /{shortUrl}", rateLimitGlobally(http.HandlerFunc(app.RetrieveUrl)))
 	mux.Handle("POST /api/shorten", withMiddlewares(http.HandlerFunc(app.ShortenUrl)))
+
+	//No metrics Streaming for stress test server
 	// mux.Handle("GET /api/metrics/stream", rateLimitGlobally(http.HandlerFunc(app.StreamMetrics)))
 	testServer.Handler = SetupCors(mux)
 
@@ -157,16 +160,17 @@ func StartTestServer() (*http.Server, *App, error) {
 
 }
 
-func MakeTestRouteMiddlewares() (Middleware, func(), error) {
+func MakeStressTestRouteMiddlewares() (Middleware, func(), error) {
+	cfg := LoadStressTestRouteMiddlewareConfig()
 
 	//create global limiter & middleware
-	rateLimitGlobally, globalRateLimiter, err := MakeGlobalRateLimitMiddleware(InMemory, 5, 5, 1)
+	rateLimitGlobally, globalRateLimiter, err := MakeGlobalRateLimitMiddleware(InMemory, cfg.GlobalLimiterCount, cfg.GlobalLimiterCap, cfg.GlobalLimiterRate)
 	if err != nil {
 		return nil, nil, errors.New("Failed to create global rate limiter for stress test route.")
 	}
 
 	//create per client limiter & middleware
-	rateLimitPerClient, perClientRateLimiter, err := MakePerClientRateLimitMiddleware(InMemory, 50, 1, time.Minute)
+	rateLimitPerClient, perClientRateLimiter, err := MakePerClientRateLimitMiddleware(InMemory, cfg.PerClientLimiterCap, cfg.PerClientLimiterLimit, cfg.PerClientLimiterWindow)
 
 	if err != nil {
 		globalRateLimiter.Offline()
@@ -185,4 +189,15 @@ func SendSSEErrorEvent(w http.ResponseWriter, message string, f http.Flusher) {
 	fmt.Fprintf(w, "event: error\ndata: {\"errorMessage\": \"%s\"}\n\n", message)
 
 	f.Flush()
+}
+
+func Load404Page() string {
+	page404HTMLText, err := os.ReadFile("frontend/out/404/html")
+
+	if err != nil {
+		//TODO log 404 page load error
+		return ""
+	}
+
+	return string(page404HTMLText)
 }

@@ -3,7 +3,6 @@ package main
 import (
 	"log"
 	"net/http"
-	"time"
 )
 
 type Middleware func(http.Handler) http.Handler
@@ -17,24 +16,31 @@ const (
 
 const maxUrlLength = 4096
 
+var Cfg, cfgErr = LoadConfig()
+
 func main() {
 
+	if cfgErr != nil {
+		//ToDo log that config was unable to  be loaded
+		log.Fatal(cfgErr)
+	}
 	server := &http.Server{
-		Addr: ":8090",
+		Addr: Cfg.ServerAddr,
 	}
 
 	idleConnsClosed := make(chan struct{})
 	EnableGracefulShutdown(idleConnsClosed, server)
 
 	//create global limiter & middleware
-	rateLimitGlobally, globalRateLimiter, err := MakeGlobalRateLimitMiddleware(InMemory, 50000, 50000, 10000)
+	rateLimitGlobally, globalRateLimiter, err := MakeGlobalRateLimitMiddleware(InMemory, Cfg.GlobalLimiterCount, Cfg.GlobalLimiterCap, Cfg.GlobalLimiterRate)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer globalRateLimiter.Offline()
 
 	//create per client limiter & middleware
-	rateLimitPerClient, perClientRateLimiter, err := MakePerClientRateLimitMiddleware(InMemory, 50000, 10, time.Minute)
+	rateLimitPerClient, perClientRateLimiter, err := MakePerClientRateLimitMiddleware(InMemory, Cfg.PerClientLimiterCap, Cfg.PerClientLimiterLimit, Cfg.PerClientLimiterWindow)
+
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -43,14 +49,14 @@ func main() {
 	//middleware composers
 	withMiddlewares := ComposeMiddlewares(rateLimitGlobally, rateLimitPerClient)
 	//composed middleware for stress test route
-	stressTestMiddlewares, cleanup, err := MakeTestRouteMiddlewares()
+	stressTestMiddlewares, cleanup, err := MakeStressTestRouteMiddlewares()
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer cleanup()
 
 	//url shortener struct
-	shortener, err := NewUrlShortener(InMemory, 100000, time.Hour)
+	shortener, err := NewUrlShortener(InMemory, Cfg.ShortenerCap, Cfg.ShortenerTTL)
 	if err != nil {
 		log.Fatal(err)
 	}
