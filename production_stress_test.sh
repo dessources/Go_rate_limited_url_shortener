@@ -7,7 +7,7 @@ PORT=${1:-8091}
 
 BASE_URL="http://localhost:$PORT"
 
-echo "Spinning up new test server to start on port $PORT..."
+echo "Spinning up new test server on port $PORT..."
 
 # Keep trying until the server returns a 200 OK
 # -s: Silent mode
@@ -45,9 +45,13 @@ echo ""
 # # ============================================
 # # Test 2: Missing API key (should return 401)
 # # ============================================
-# echo "--- Test 2: Missing API key on protected route ---"
-# curl -s -w "Status: %{http_code}\n" "$BASE_URL/testshort"
-# echo ""
+echo "--- Test 2: Missing API key on protected route ---"
+curl -X POST -s -w "Status: %{http_code}\n" \
+      -H "Content-Type: application/json" \
+      -d '{"original":"https://example.com"}' \
+      "$BASE_URL/api/shorten"
+
+echo ""
 
 # ============================================
 # Test 3: POST /api/shorten - create a short URL to example.com

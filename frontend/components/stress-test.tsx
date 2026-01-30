@@ -111,7 +111,7 @@ export default function StressTest() {
             </Button>
             <p className="text-sm text-ghost mb-4">
               This will spin up a test server and simulate high traffic to it.
-              The test takes about one minute to complete.
+              The test takes less than a minute to complete.
             </p>
             <Card className="bg-black mt-7">
               <CardHeader>
@@ -121,11 +121,11 @@ export default function StressTest() {
               </CardHeader>
               <CardContent>
                 {error ? (
-                  <pre className="max-h-80  overflow-auto font-mono text-xs text-red-400/90">
+                  <pre className="max-h-50  overflow-auto font-mono text-xs text-red-400/90">
                     {error}
                   </pre>
                 ) : (
-                  <pre className="min-h-80 max-h-130  overflow-auto font-mono text-xs text-green-400/90">
+                  <pre className="min-h-35 max-h-130  overflow-auto font-mono text-xs text-green-400/90">
                     {stressTestOutput + "\n\n\n\n\n\n\n"}
                   </pre>
                 )}

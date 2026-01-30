@@ -41,20 +41,23 @@ func MakePerClientRateLimitMiddleware() (Middleware, *PerClientRateLimiter, erro
 			//TODO: Clients should be identifed by combination of IP and API key
 
 			if r.URL.Path == "/api/shorten" {
-				clientId, _, err := net.SplitHostPort(r.RemoteAddr)
+				ip, _, err := net.SplitHostPort(r.RemoteAddr)
 				if err != nil {
-					clientId = r.RemoteAddr
+					ip = r.RemoteAddr
 				}
 
-				if clientId == "" {
-					fmt.Println("Unable to extract client IP address")
+				apiKey := r.Header.Get("X-API-Key")
+				if apiKey == "" {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusUnauthorized)
-					errorMessage = "You are not Authorized to used this site at the moment. Please try again later"
+					errorMessage = "Invalid API key provided."
 					json.NewEncoder(w).Encode(&ErrorResponse{errorMessage})
 					return
+				}
 
-				} else if storageFull, err := limiter.Allow(clientId); err != nil {
+				clientId := fmt.Sprintf("%s:%s", ip, apiKey)
+
+				if storageFull, err := limiter.Allow(clientId); err != nil {
 
 					if storageFull {
 						errorMessage = "We are a bit busy right now. Please try again later."

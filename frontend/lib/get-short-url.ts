@@ -5,7 +5,7 @@ export default async function getShortUrl(url: string): Promise<string> {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-API-Key": "somekey",
+      "X-API-Key": "NotARealKey",
     },
     body: JSON.stringify({ original: url }),
   });
