@@ -91,7 +91,7 @@ func LoadStressTestRouteMiddlewareConfig() *StressTestRouteMiddlewareConfig {
 		// Per-Client Rate Limiter
 		PerClientLimiterCap:    getEnvAsInt("STRESS_TEST_PER_CLIENT_LIMITER_COUNT", 50),
 		PerClientLimiterLimit:  getEnvAsInt("STRESS_TEST_PER_CLIENT_LIMITER_LIMIT", 1),
-		PerClientLimiterWindow: getEnvAsDuration("STRESS_TEST_PER_CLIENT_LIMITER_WINDOW", time.Minute),
+		PerClientLimiterWindow: getEnvAsDuration("STRESS_TEST_PER_CLIENT_LIMITER_WINDOW", time.Minute*5),
 
 		PerClientLimiterClientTtl: getEnvAsDuration("PER_CLIENT_LIMITER_CLIENT_TTL", time.Minute*30),
 	}
