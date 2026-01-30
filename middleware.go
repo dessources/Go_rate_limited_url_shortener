@@ -30,8 +30,8 @@ func MakeGlobalRateLimitMiddleware(storageType StorageType, count int, cap int, 
 	}, limiter, nil
 }
 
-func MakePerClientRateLimitMiddleware(storageType StorageType, cap int, limit int, window time.Duration) (Middleware, *PerClientRateLimiter, error) {
-	limiter, err := NewPerClientRateLimiter(storageType, cap, limit, window)
+func MakePerClientRateLimitMiddleware(storageType StorageType, cap int, limit int, window, ttl time.Duration) (Middleware, *PerClientRateLimiter, error) {
+	limiter, err := NewPerClientRateLimiter(storageType, cap, limit, window, ttl)
 	if err != nil {
 		return nil, nil, err
 	}

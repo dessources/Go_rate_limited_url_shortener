@@ -22,9 +22,10 @@ type Config struct {
 	GlobalLimiterRate  int
 
 	// Per-Client Rate Limiter
-	PerClientLimiterCap    int
-	PerClientLimiterLimit  int
-	PerClientLimiterWindow time.Duration
+	PerClientLimiterCap       int
+	PerClientLimiterLimit     int
+	PerClientLimiterWindow    time.Duration
+	PerClientLimiterClientTtl time.Duration
 
 	// URL Shortener
 	ShortenerCap    int
@@ -57,6 +58,8 @@ func LoadConfig() (*Config, error) {
 		PerClientLimiterLimit:  getEnvAsInt("PER_CLIENT_LIMITER_LIMIT", 10),
 		PerClientLimiterWindow: getEnvAsDuration("PER_CLIENT_WINDOW_SECONDS", 60*time.Second),
 
+		PerClientLimiterClientTtl: getEnvAsDuration("PER_CLIENT_LIMITER_CLIENT_TTL", time.Minute*30),
+
 		ShortenerCap:    getEnvAsInt("SHORTENER_CAP", 100000),
 		ShortenerTTL:    getEnvAsDuration("SHORTENER_TTL_HOURS", time.Hour),
 		ShortCodeLength: getEnvAsInt("SHORT_CODE_LENGTH", 4),
@@ -73,9 +76,10 @@ type StressTestRouteMiddlewareConfig struct {
 	GlobalLimiterRate  int
 
 	// Per-Client Rate Limiter
-	PerClientLimiterCap    int
-	PerClientLimiterLimit  int
-	PerClientLimiterWindow time.Duration
+	PerClientLimiterCap       int
+	PerClientLimiterLimit     int
+	PerClientLimiterWindow    time.Duration
+	PerClientLimiterClientTtl time.Duration
 }
 
 func LoadStressTestRouteMiddlewareConfig() *StressTestRouteMiddlewareConfig {
@@ -88,6 +92,8 @@ func LoadStressTestRouteMiddlewareConfig() *StressTestRouteMiddlewareConfig {
 		PerClientLimiterCap:    getEnvAsInt("STRESS_TEST_PER_CLIENT_LIMITER_COUNT", 50),
 		PerClientLimiterLimit:  getEnvAsInt("STRESS_TEST_PER_CLIENT_LIMITER_LIMIT", 1),
 		PerClientLimiterWindow: getEnvAsDuration("STRESS_TEST_PER_CLIENT_LIMITER_WINDOW", time.Minute),
+
+		PerClientLimiterClientTtl: getEnvAsDuration("PER_CLIENT_LIMITER_CLIENT_TTL", time.Minute*30),
 	}
 }
 

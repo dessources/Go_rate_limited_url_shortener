@@ -43,20 +43,19 @@ export default function StressTest() {
       evtSource.onmessage = (e) => {
         if (e.data) {
           const parsedData = JSON.parse(e.data);
-          if (parsedData.error) {
-            setError(parsedData.error);
-            evtSource.close();
-            setStressTestStatus(StressTestStatus.DONE);
-          } else {
-            setStressTestOutput((prev) => prev + "\n" + parsedData.outputLine);
-          }
+          setStressTestOutput((prev) => prev + "\n" + parsedData.outputLine);
         }
       };
 
-      evtSource.addEventListener("error", () => {
-        setError(
-          "Rate limit for stress test feature reached or connection may have failed. Try again in a minute.",
-        );
+      evtSource.addEventListener("error", (e) => {
+        const { data } = e as MessageEvent;
+        if (data) {
+          const parsedData = JSON.parse(data);
+          if (parsedData.errorMessage) setError(parsedData.errorMessage);
+        } else
+          setError(
+            "Rate limit for stress test feature reached or connection may have failed. Try again in a minute.",
+          );
         setStressTestStatus(StressTestStatus.READY);
         evtSource.close();
       });

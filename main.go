@@ -14,8 +14,6 @@ const (
 	Redis
 )
 
-const maxUrlLength = 4096
-
 func main() {
 	cfg, err := LoadConfig()
 	if err != nil {
@@ -37,7 +35,7 @@ func main() {
 	defer globalRateLimiter.Offline()
 
 	//create per client limiter & middleware
-	rateLimitPerClient, perClientRateLimiter, err := MakePerClientRateLimitMiddleware(InMemory, cfg.PerClientLimiterCap, cfg.PerClientLimiterLimit, cfg.PerClientLimiterWindow)
+	rateLimitPerClient, perClientRateLimiter, err := MakePerClientRateLimitMiddleware(InMemory, cfg.PerClientLimiterCap, cfg.PerClientLimiterLimit, cfg.PerClientLimiterWindow, cfg.PerClientLimiterClientTtl)
 
 	if err != nil {
 		log.Fatal(err)

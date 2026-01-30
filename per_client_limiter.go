@@ -6,12 +6,10 @@ import (
 	"time"
 )
 
-const ttl = time.Minute * 30
-
 type TimeLogStore interface {
 	Add(k string, w time.Duration) (bool, error)
 	RemoveClient(k string) error
-	RemoveInactiveClients() error
+	RemoveInactiveClients(ttl time.Duration) error
 	Cap() int
 	Len() int
 }
@@ -83,7 +81,7 @@ func (s *InMemoryTimeLogStore) RemoveClient(k string) error {
 	return nil
 }
 
-func (s *InMemoryTimeLogStore) RemoveInactiveClients() error {
+func (s *InMemoryTimeLogStore) RemoveInactiveClients(ttl time.Duration) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	keysToDelete := []string{}
@@ -116,11 +114,11 @@ func (s *InMemoryTimeLogStore) Len() int {
 }
 
 func (l *PerClientRateLimiter) RemoveInactiveClientsRoutine() {
-	ticker := time.NewTicker(time.Minute * 30)
+	ticker := time.NewTicker(l.clientTtl / 2)
 	for {
 		select {
 		case <-ticker.C:
-			l.timeLogStore.RemoveInactiveClients()
+			l.timeLogStore.RemoveInactiveClients(l.clientTtl)
 
 		case <-l.done:
 			ticker.Stop()
@@ -132,6 +130,7 @@ func (l *PerClientRateLimiter) RemoveInactiveClientsRoutine() {
 type PerClientRateLimiter struct {
 	timeLogStore TimeLogStore
 	window       time.Duration
+	clientTtl    time.Duration
 	done         chan struct{}
 }
 
@@ -143,7 +142,7 @@ func (l *PerClientRateLimiter) Offline() {
 	close(l.done)
 }
 
-func NewPerClientRateLimiter(storageType StorageType, cap int, limit int, window time.Duration) (*PerClientRateLimiter, error) {
+func NewPerClientRateLimiter(storageType StorageType, cap int, limit int, window, ttl time.Duration) (*PerClientRateLimiter, error) {
 
 	var limiter PerClientRateLimiter
 	switch storageType {
@@ -151,7 +150,7 @@ func NewPerClientRateLimiter(storageType StorageType, cap int, limit int, window
 		logs := make(map[string][]time.Time)
 		done := make(chan struct{})
 		timeLogStore := &InMemoryTimeLogStore{cap: cap, logs: logs, limit: limit}
-		limiter = PerClientRateLimiter{timeLogStore, window, done}
+		limiter = PerClientRateLimiter{timeLogStore, window, ttl, done}
 
 		go limiter.RemoveInactiveClientsRoutine()
 

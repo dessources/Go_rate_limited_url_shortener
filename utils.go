@@ -79,7 +79,7 @@ func (fsys FileHidingFileSystem) Open(name string) (http.File, error) {
 }
 
 func ValidateUrl(s string, cfg *Config) (string, bool) {
-	if len(s) > maxUrlLength {
+	if len(s) > cfg.MaxUrlLength {
 		return fmt.Sprintf("Provided url exceeds max-length of %d", cfg.MaxUrlLength), false
 	}
 
@@ -127,7 +127,7 @@ func StartTestServer(cfg *Config) (*http.Server, *App, error) {
 	}
 
 	//create per client limiter & middleware
-	rateLimitPerClient, perClientRateLimiter, err := MakePerClientRateLimitMiddleware(InMemory, cfg.PerClientLimiterCap, cfg.PerClientLimiterLimit, cfg.PerClientLimiterWindow)
+	rateLimitPerClient, perClientRateLimiter, err := MakePerClientRateLimitMiddleware(InMemory, cfg.PerClientLimiterCap, cfg.PerClientLimiterLimit, cfg.PerClientLimiterWindow, cfg.PerClientLimiterClientTtl)
 	if err != nil {
 		globalRateLimiter.Offline()
 		return nil, nil, errors.New("Failed to create per client rate limiter for stress test.")
@@ -170,7 +170,7 @@ func MakeStressTestRouteMiddlewares() (Middleware, func(), error) {
 	}
 
 	//create per client limiter & middleware
-	rateLimitPerClient, perClientRateLimiter, err := MakePerClientRateLimitMiddleware(InMemory, cfg.PerClientLimiterCap, cfg.PerClientLimiterLimit, cfg.PerClientLimiterWindow)
+	rateLimitPerClient, perClientRateLimiter, err := MakePerClientRateLimitMiddleware(InMemory, cfg.PerClientLimiterCap, cfg.PerClientLimiterLimit, cfg.PerClientLimiterWindow, cfg.PerClientLimiterClientTtl)
 
 	if err != nil {
 		globalRateLimiter.Offline()
