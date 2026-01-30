@@ -24,7 +24,7 @@ export default function NotFound() {
 
           {/* Message */}
           <p className="mb-8 max-w-md text-pretty text-lg leading-relaxed text-muted-foreground">
-            {"Looks like this short link has gone missing or never existed."}
+            {"Looks like this short link has expiered or never existed."}
           </p>
 
           {/* Action Buttons */}

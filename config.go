@@ -42,7 +42,7 @@ func LoadConfig() (*Config, error) {
 	globalCap := getEnvAsInt("GLOBAL_LIMITER_CAP", 50000)
 	baseUrl := getEnv("BASE_URL", "https://pety.to")
 	corsAllowedOrigins := append([]string{baseUrl},
-		getEnvAsSlice("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000,http://localhost:8090"})...)
+		getEnvAsSlice("CORS_ALLOWED_ORIGINS", []string{"http://localhost:3000", "http://localhost:8090"})...)
 
 	return &Config{
 		baseUrl:            baseUrl,

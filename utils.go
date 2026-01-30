@@ -20,7 +20,7 @@ import (
 //---------------Middleware utils ----------------
 
 func SetupCors(mux *http.ServeMux, cfg *Config) http.Handler {
-
+	fmt.Println(cfg.CorsAllowedOrigins)
 	c := cors.New(cors.Options{
 		AllowedOrigins:   cfg.CorsAllowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
@@ -156,7 +156,8 @@ func StartTestServer(app *App) (*http.Server, *App, error) {
 	// mux.Handle("GET /api/metrics/stream", rateLimitGlobally(http.HandlerFunc(app.StreamMetrics)))
 	testServer.Handler = SetupCors(mux, testApp.cfg)
 
-	return testServer, app, nil
+	// return testServer, app, nil
+	return testServer, testApp, nil
 
 }
 
@@ -181,7 +182,6 @@ func MakeStressTestRouteMiddlewares(logger *slog.Logger) (Middleware, func(), er
 		globalRateLimiter.Offline()
 		perClientRateLimiter.Offline()
 	}, nil
-
 }
 
 func SendSSEErrorEvent(w http.ResponseWriter, message string, f http.Flusher) {
