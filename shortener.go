@@ -22,6 +22,7 @@ type UrlShortener interface {
 	Offline()
 	Cap() int
 	Len() int
+	ShortCodeLen() int
 }
 
 type UrlMapping struct {
@@ -30,12 +31,13 @@ type UrlMapping struct {
 }
 
 type InMemoryUrlShortener struct {
-	cap     int
-	len     int
-	mapping map[string]*UrlMapping
-	done    chan struct{}
-	ttl     time.Duration
-	mu      sync.RWMutex
+	cap          int
+	len          int
+	shortCodeLen int
+	mapping      map[string]*UrlMapping
+	done         chan struct{}
+	ttl          time.Duration
+	mu           sync.RWMutex
 }
 
 func (m *InMemoryUrlShortener) AddMapping(original, short string) (bool, error) {
@@ -108,11 +110,17 @@ func (m *InMemoryUrlShortener) Len() int {
 	return m.len
 }
 
+func (m *InMemoryUrlShortener) ShortCodeLen() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.shortCodeLen
+}
+
 func (m *InMemoryUrlShortener) Offline() {
 	close(m.done)
 }
 
-func NewUrlShortener(storageType StorageType, cap int, ttl time.Duration) (UrlShortener, error) {
+func NewUrlShortener(storageType StorageType, cap int, ttl time.Duration, ShortCodeLength int) (UrlShortener, error) {
 	if cap < MinCap {
 		return nil, fmt.Errorf("Capacity has to be at least %d", MinCap)
 	}
@@ -126,7 +134,7 @@ func NewUrlShortener(storageType StorageType, cap int, ttl time.Duration) (UrlSh
 	case InMemory:
 		done := make(chan struct{})
 		mapping := make(map[string]*UrlMapping)
-		urlShortener = &InMemoryUrlShortener{cap: cap, done: done, ttl: ttl, mapping: mapping}
+		urlShortener = &InMemoryUrlShortener{cap: cap, done: done, ttl: ttl, mapping: mapping, shortCodeLen: ShortCodeLength}
 
 		// reset mappings every hour
 		go urlShortener.RegularlyResetMappings()
@@ -143,8 +151,6 @@ func NewUrlShortener(storageType StorageType, cap int, ttl time.Duration) (UrlSh
 // Shorten functionality definition
 //-------------------------------------------------------------------------
 
-const shortUrlLength int = 4
-
 var charTypes = [3]rune{'0', 'A', 'a'} // ascii start value for numbers, upper & lower letters
 
 func Shorten(s UrlShortener, original string) (string, error) {
@@ -156,7 +162,7 @@ func Shorten(s UrlShortener, original string) (string, error) {
 		var result strings.Builder
 		var charPos int
 		var charType int
-		for range shortUrlLength {
+		for range s.ShortCodeLen() {
 
 			if charType = rand.IntN(3); charType == 0 {
 				charPos = rand.IntN(10)

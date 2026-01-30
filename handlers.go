@@ -36,6 +36,7 @@ func MakeIndexHandler() http.Handler {
 //------- shortener routes ------------------------
 
 type App struct {
+	cfg                  *Config
 	shortener            UrlShortener
 	globalRateLimiter    *GlobalRateLimiter
 	perClientRateLimiter *PerClientRateLimiter
@@ -54,7 +55,7 @@ func (app *App) RetrieveUrl(w http.ResponseWriter, r *http.Request) {
 			if page404HTMLText != "" {
 				fmt.Fprintf(w, "%s", page404HTMLText)
 			} else {
-				fmt.Fprintf(w, Cfg.Fallback404HTML)
+				fmt.Fprintf(w, app.cfg.Fallback404HTML)
 			}
 
 		} else {
@@ -76,7 +77,7 @@ func (app *App) ShortenUrl(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(&ErrorResponse{errorMessage})
 		return
 
-	} else if message, ok := ValidateUrl(payload.Original); !ok {
+	} else if message, ok := ValidateUrl(payload.Original, app.cfg); !ok {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(&ErrorResponse{message})
 		return
@@ -149,7 +150,7 @@ func (app *App) StreamMetrics(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func StressTest(w http.ResponseWriter, r *http.Request) {
+func (app *App) StressTest(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		w.Header().Set("Content-Type", "application/json")
@@ -162,7 +163,7 @@ func StressTest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Cache-Control", "no-cache")
 	w.Header().Add("Connection", "keep-alive")
 
-	if testServer, app, err := StartTestServer(); err != nil {
+	if testServer, app, err := StartTestServer(app.cfg); err != nil {
 		//TODO log server start failure error message
 		SendSSEErrorEvent(w, "Failed to start test server. Please try again later.", flusher)
 

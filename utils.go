@@ -19,10 +19,10 @@ import (
 
 //---------------Middleware utils ----------------
 
-func SetupCors(mux *http.ServeMux) http.Handler {
+func SetupCors(mux *http.ServeMux, cfg *Config) http.Handler {
 
 	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"https://pety.to", "http://localhost:8090", "http://localhost:3000"},
+		AllowedOrigins:   cfg.CorsAllowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-API-Key"},
 		AllowCredentials: true,
@@ -78,9 +78,9 @@ func (fsys FileHidingFileSystem) Open(name string) (http.File, error) {
 	return FileHidingFile{file}, nil
 }
 
-func ValidateUrl(s string) (string, bool) {
+func ValidateUrl(s string, cfg *Config) (string, bool) {
 	if len(s) > maxUrlLength {
-		return fmt.Sprintf("Provided url exceeds max-length of %d", maxUrlLength), false
+		return fmt.Sprintf("Provided url exceeds max-length of %d", cfg.MaxUrlLength), false
 	}
 
 	u, err := url.Parse(s)
@@ -115,19 +115,19 @@ func EnableGracefulShutdown(done chan struct{}, server *http.Server) {
 
 }
 
-func StartTestServer() (*http.Server, *App, error) {
+func StartTestServer(cfg *Config) (*http.Server, *App, error) {
 
-	testServer := &http.Server{Addr: Cfg.TestServerAddr}
+	testServer := &http.Server{Addr: cfg.TestServerAddr}
 
 	//create global limiter & middleware
-	rateLimitGlobally, globalRateLimiter, err := MakeGlobalRateLimitMiddleware(InMemory, Cfg.GlobalLimiterCount, Cfg.GlobalLimiterCap, Cfg.GlobalLimiterRate)
+	rateLimitGlobally, globalRateLimiter, err := MakeGlobalRateLimitMiddleware(InMemory, cfg.GlobalLimiterCount, cfg.GlobalLimiterCap, cfg.GlobalLimiterRate)
 
 	if err != nil {
 		return nil, nil, errors.New("Failed to create global rate limiter for stress test.")
 	}
 
 	//create per client limiter & middleware
-	rateLimitPerClient, perClientRateLimiter, err := MakePerClientRateLimitMiddleware(InMemory, Cfg.PerClientLimiterCap, Cfg.PerClientLimiterLimit, Cfg.PerClientLimiterWindow)
+	rateLimitPerClient, perClientRateLimiter, err := MakePerClientRateLimitMiddleware(InMemory, cfg.PerClientLimiterCap, cfg.PerClientLimiterLimit, cfg.PerClientLimiterWindow)
 	if err != nil {
 		globalRateLimiter.Offline()
 		return nil, nil, errors.New("Failed to create per client rate limiter for stress test.")
@@ -137,14 +137,14 @@ func StartTestServer() (*http.Server, *App, error) {
 	withMiddlewares := ComposeMiddlewares(rateLimitGlobally, rateLimitPerClient)
 
 	//url shortener struct
-	shortener, err := NewUrlShortener(InMemory, Cfg.ShortenerCap, Cfg.ShortenerTTL)
+	shortener, err := NewUrlShortener(InMemory, cfg.ShortenerCap, cfg.ShortenerTTL, cfg.ShortCodeLength)
 	if err != nil {
 		globalRateLimiter.Offline()
 		perClientRateLimiter.Offline()
 		return nil, nil, errors.New("Failed to create shortener instance for stress test.")
 	}
 
-	app := &App{shortener, globalRateLimiter, perClientRateLimiter}
+	app := &App{cfg, shortener, globalRateLimiter, perClientRateLimiter}
 
 	//Route handlers
 	mux := http.NewServeMux()
@@ -154,7 +154,7 @@ func StartTestServer() (*http.Server, *App, error) {
 
 	//No metrics Streaming for stress test server
 	// mux.Handle("GET /api/metrics/stream", rateLimitGlobally(http.HandlerFunc(app.StreamMetrics)))
-	testServer.Handler = SetupCors(mux)
+	testServer.Handler = SetupCors(mux, cfg)
 
 	return testServer, app, nil
 

@@ -16,30 +16,28 @@ const (
 
 const maxUrlLength = 4096
 
-var Cfg, cfgErr = LoadConfig()
-
 func main() {
-
-	if cfgErr != nil {
+	cfg, err := LoadConfig()
+	if err != nil {
 		//ToDo log that config was unable to  be loaded
-		log.Fatal(cfgErr)
+		log.Fatal(cfg)
 	}
 	server := &http.Server{
-		Addr: Cfg.ServerAddr,
+		Addr: cfg.ServerAddr,
 	}
 
 	idleConnsClosed := make(chan struct{})
 	EnableGracefulShutdown(idleConnsClosed, server)
 
 	//create global limiter & middleware
-	rateLimitGlobally, globalRateLimiter, err := MakeGlobalRateLimitMiddleware(InMemory, Cfg.GlobalLimiterCount, Cfg.GlobalLimiterCap, Cfg.GlobalLimiterRate)
+	rateLimitGlobally, globalRateLimiter, err := MakeGlobalRateLimitMiddleware(InMemory, cfg.GlobalLimiterCount, cfg.GlobalLimiterCap, cfg.GlobalLimiterRate)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer globalRateLimiter.Offline()
 
 	//create per client limiter & middleware
-	rateLimitPerClient, perClientRateLimiter, err := MakePerClientRateLimitMiddleware(InMemory, Cfg.PerClientLimiterCap, Cfg.PerClientLimiterLimit, Cfg.PerClientLimiterWindow)
+	rateLimitPerClient, perClientRateLimiter, err := MakePerClientRateLimitMiddleware(InMemory, cfg.PerClientLimiterCap, cfg.PerClientLimiterLimit, cfg.PerClientLimiterWindow)
 
 	if err != nil {
 		log.Fatal(err)
@@ -56,14 +54,14 @@ func main() {
 	defer cleanup()
 
 	//url shortener struct
-	shortener, err := NewUrlShortener(InMemory, Cfg.ShortenerCap, Cfg.ShortenerTTL)
+	shortener, err := NewUrlShortener(InMemory, cfg.ShortenerCap, cfg.ShortenerTTL, cfg.ShortCodeLength)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer shortener.Offline()
 
 	//create app struct with methods for api handler logic
-	app := &App{shortener, globalRateLimiter, perClientRateLimiter}
+	app := &App{cfg, shortener, globalRateLimiter, perClientRateLimiter}
 
 	//Route handlers
 	mux := http.NewServeMux()
@@ -71,8 +69,8 @@ func main() {
 	mux.Handle("GET /{shortUrl}", rateLimitGlobally(http.HandlerFunc(app.RetrieveUrl)))
 	mux.Handle("POST /api/shorten", withMiddlewares(http.HandlerFunc(app.ShortenUrl)))
 	mux.Handle("GET /api/metrics/stream", rateLimitGlobally(http.HandlerFunc(app.StreamMetrics)))
-	mux.Handle("GET /api/stress-test/stream", stressTestMiddlewares(http.HandlerFunc(StressTest)))
-	server.Handler = SetupCors(mux)
+	mux.Handle("GET /api/stress-test/stream", stressTestMiddlewares(http.HandlerFunc(app.StressTest)))
+	server.Handler = SetupCors(mux, cfg)
 
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatal(err)

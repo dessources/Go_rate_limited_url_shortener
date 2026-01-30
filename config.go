@@ -27,8 +27,10 @@ type Config struct {
 	PerClientLimiterWindow time.Duration
 
 	// URL Shortener
-	ShortenerCap int
-	ShortenerTTL time.Duration
+	ShortenerCap    int
+	ShortenerTTL    time.Duration
+	ShortCodeLength int
+	MaxUrlLength    int
 
 	//others
 	Fallback404HTML string
@@ -55,8 +57,10 @@ func LoadConfig() (*Config, error) {
 		PerClientLimiterLimit:  getEnvAsInt("PER_CLIENT_LIMITER_LIMIT", 10),
 		PerClientLimiterWindow: getEnvAsDuration("PER_CLIENT_WINDOW_SECONDS", 60*time.Second),
 
-		ShortenerCap: getEnvAsInt("SHORTENER_CAP", 100000),
-		ShortenerTTL: getEnvAsDuration("SHORTENER_TTL_HOURS", time.Hour),
+		ShortenerCap:    getEnvAsInt("SHORTENER_CAP", 100000),
+		ShortenerTTL:    getEnvAsDuration("SHORTENER_TTL_HOURS", time.Hour),
+		ShortCodeLength: getEnvAsInt("SHORT_CODE_LENGTH", 4),
+		MaxUrlLength:    getEnvAsInt("MAX_URL_LENGTH", 4096),
 
 		Fallback404HTML: getEnv("FALLBACK_404_HTML", "<h1>Short link not found</h1><p>It seems this short link has expired or never existed.</p><a href='/'>Go to homepage</a>"),
 	}, nil
