@@ -7,7 +7,7 @@ PORT=${1:-8091}
 
 BASE_URL="http://localhost:$PORT"
 
-echo "Waiting for test server to start on port $PORT..."
+echo "Spinning up new test server to start on port $PORT..."
 
 # Keep trying until the server returns a 200 OK
 # -s: Silent mode

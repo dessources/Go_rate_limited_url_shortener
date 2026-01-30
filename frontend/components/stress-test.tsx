@@ -1,55 +1,71 @@
-import { Loader2, Play } from "lucide-react";
+import { Loader2, Loader, Play, Trash, StopCircle } from "lucide-react";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { BASE_URL } from "@/lib/utils";
+
+enum StressTestStatus {
+  DONE,
+  RUNNING,
+  READY,
+}
 
 export default function StressTest() {
-  const [stressTestRunning, setStressTestRunning] = useState(false);
-  const [stressTestOutput, setStressTestOutput] = useState(
-    "Waiting for test to start...",
+  const terminalStartMessage = "Waiting for test to start...";
+
+  const [stressTestStatus, setStressTestStatus] = useState<StressTestStatus>(
+    StressTestStatus.READY,
   );
 
+  const [stressTestOutput, setStressTestOutput] =
+    useState(terminalStartMessage);
+  const [error, setError] = useState("");
+  const [evtSource, setEvtSource] = useState<EventSource>();
+
   const handleStressTest = () => {
-    setStressTestRunning(true);
+    setStressTestStatus(StressTestStatus.RUNNING);
+    setStressTestOutput(terminalStartMessage);
+    setError("");
     setStressTestOutput("Initializing stress test...\n");
 
-    // Simulate stress test output
-    const outputs = [
-      "Starting stress test with 1000 concurrent requests...",
-      "Spawning worker threads...",
-      "Workers: [=========>] 100%",
-      "Sending requests to /api/shorten...",
-      "Progress: [==>       ] 25% (250/1000)",
-      "Progress: [=====>    ] 50% (500/1000)",
-      "Progress: [========> ] 75% (750/1000)",
-      "Progress: [==========] 100% (1000/1000)",
-      "",
-      "Results:",
-      "  Total Requests: 1000",
-      "  Successful: 982",
-      "  Failed: 18",
-      "  Average Response Time: 45ms",
-      "  Max Response Time: 312ms",
-      "  Min Response Time: 12ms",
-      "",
-      "Rate Limiter Performance:",
-      "  Global hits: 1000/1000",
-      "  Per-client rejections: 18",
-      "",
-      "Test completed successfully!",
-    ];
+    const evtSource = new EventSource(`${BASE_URL}/api/stress-test/stream`);
+    setEvtSource(evtSource);
 
-    let index = 0;
-    const interval = setInterval(() => {
-      if (index < outputs.length) {
-        setStressTestOutput((prev) => prev + "\n" + outputs[index]);
-        index++;
-      } else {
-        clearInterval(interval);
-        setStressTestRunning(false);
+    evtSource.onmessage = (e) => {
+      if (e.isTrusted && e.data) {
+        const parsedData = JSON.parse(e.data);
+        if (parsedData.error) {
+          setError(parsedData.error);
+          evtSource.close();
+          setStressTestStatus(StressTestStatus.DONE);
+        } else {
+          setStressTestOutput((prev) => prev + "\n" + parsedData.outputLine);
+        }
       }
-    }, 300);
+    };
+
+    evtSource.addEventListener("done", (e) => {
+      if (e.isTrusted && e.data) {
+        const parsedData = JSON.parse(e.data);
+        setStressTestOutput((prev) => prev + "\n" + parsedData.outputLine);
+      }
+      setStressTestStatus(StressTestStatus.DONE);
+      evtSource.close();
+    });
   };
+
+  const handleReset = () => {
+    if (stressTestStatus && evtSource) {
+      evtSource.close();
+    }
+    setStressTestOutput(terminalStartMessage);
+    setError("");
+    setStressTestStatus(StressTestStatus.READY);
+  };
+
+  const testIsRunning = stressTestStatus == StressTestStatus.RUNNING;
+  const testIsReady = stressTestStatus == StressTestStatus.READY;
+
   return (
     <div>
       <h2 className="mb-4 text-2xl font-semibold text-foreground">
@@ -59,14 +75,14 @@ export default function StressTest() {
         <CardContent className="pt-6">
           <div className="space-y-4">
             <Button
-              variant="destructive"
+              variant={testIsRunning ? "secondary" : "destructive"}
               onClick={handleStressTest}
-              disabled={stressTestRunning}
-              // className="w-full"
+              disabled={testIsRunning}
+              className="mr-2 "
             >
-              {stressTestRunning ? (
+              {testIsRunning ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader className="mr-2 h-4 w-4 animate-spin" />
                   Running Test...
                 </>
               ) : (
@@ -76,20 +92,43 @@ export default function StressTest() {
                 </>
               )}
             </Button>
-            <p className="text-sm text-muted-foreground">
-              This will simulate high traffic to the server. Metrics will update
-              in real-time. The test takes about one minute to complete.
+            <Button
+              variant={testIsRunning ? "destructive" : "secondary"}
+              onClick={handleReset}
+              disabled={testIsReady}
+            >
+              {testIsRunning ? (
+                <>
+                  <StopCircle className="mr-2 h-4 " />
+                  Stop test
+                </>
+              ) : (
+                <>
+                  <Trash className="mr-2 h-4 w-4" />
+                  Reset
+                </>
+              )}
+            </Button>
+            <p className="text-sm text-ghost mb-4">
+              This will spin up a test server and simulate high traffic to it.
+              The test takes about one minute to complete.
             </p>
-            <Card className="bg-black">
+            <Card className="bg-black mt-7">
               <CardHeader>
                 <CardTitle className="text-sm font-mono text-green-400">
                   Test Output
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <pre className="max-h-80 overflow-auto font-mono text-xs text-green-400/90">
-                  {stressTestOutput}
-                </pre>
+                {error ? (
+                  <pre className="max-h-80  overflow-auto font-mono text-xs text-red-400/90">
+                    {error}
+                  </pre>
+                ) : (
+                  <pre className="min-h-80 max-h-130  overflow-auto font-mono text-xs text-green-400/90">
+                    {stressTestOutput + "\n\n\n\n\n\n\n"}
+                  </pre>
+                )}
               </CardContent>
             </Card>
           </div>

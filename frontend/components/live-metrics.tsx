@@ -23,8 +23,8 @@ export default function LiveMetrics({ metrics, setMetrics }: LiveMetricsProps) {
     };
 
     evtSource.onerror = (err) => {
-      console.error("SSE error:", err);
-      // optionally set an error state
+      process.env.NODE_ENV != "production" && console.error("SSE error:", err);
+      evtSource.close();
     };
 
     return () => {

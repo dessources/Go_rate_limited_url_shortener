@@ -187,6 +187,7 @@ func StressTest(w http.ResponseWriter, r *http.Request) {
 		testCommand.Stderr = testCommand.Stdout
 
 		if err := testCommand.Start(); err != nil {
+			fmt.Println(err)
 			fmt.Fprintf(w, "data: {\"error\": \"Unexpected error occured while running tests. Please try again later.\"}\n\n")
 			flusher.Flush()
 			return
@@ -212,7 +213,7 @@ func StressTest(w http.ResponseWriter, r *http.Request) {
 			default:
 				jsonData, err := json.Marshal(map[string]string{"outputLine": scanner.Text()})
 				if err != nil {
-					fmt.Fprintf(w, "data: {\"error\": \"Unexpected error occured while  reading test output. Please try again later.\"}\n\n")
+					fmt.Fprintf(w, "data: %s\n\n", jsonData)
 					flusher.Flush()
 					return
 				}
@@ -233,6 +234,11 @@ func StressTest(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintf(w, "data: {\"error\": \"Unexpected error occured while running tests. Please try again later.\"}\n\n")
 			flusher.Flush()
 			return
+		} else {
+			fmt.Println("Stress test completed successfully.")
+			fmt.Fprintf(w, "event: done\n")
+			fmt.Fprintf(w, "data: {\"outputLine\": \"Tests completed successfully.\"}\n\n")
+			flusher.Flush()
 		}
 	}
 
