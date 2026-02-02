@@ -4,6 +4,12 @@
 
 This is a url shortening service protected by two layers of rate limiting, written in Go. The purpose of this project was to improve my systems engineering skills and familiarize myself with the Go programming language.
 
+## Live Website
+
+Check out the live production version here: [https://pety.to](https://www.pety.to)
+
+"pety" is derived from the french word "petit" which means small.
+
 ## Features
 
 - Token Bucket algorithm for Global rate limiting
@@ -34,11 +40,9 @@ Go, React/Next.js, Shadcn UI, Docker, Bash
 ## Getting Started
 
 Prerequisites:
-nager.
 
 - **pnpm** is preferred but you can use any package manager
 - **Go** must be installed on your system
-- **Sliding Window Log** for per-client rate limiting
 
 With Docker:
 
