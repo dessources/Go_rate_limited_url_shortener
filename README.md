@@ -71,15 +71,57 @@ go run .
 
 The app should start running on http://localhost:8090.
 
+## Configuration
+
+All settings are configurable via environment variables. Create a `.env` file in the project root.
+
+### Server
+
+| Variable               | Description                         | Default                                       |
+| ---------------------- | ----------------------------------- | --------------------------------------------- |
+| `BASE_URL`             | Base URL for generated short links  | `https://pety.to`                             |
+| `SERVER_ADDR`          | Server listen address               | `:8090`                                       |
+| `TEST_SERVER_ADDR`     | Isolated stress test server address | `:8091`                                       |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins     | `http://localhost:3000,http://localhost:8090` |
+
+### Global Rate Limiter (Token Bucket)
+
+| Variable              | Description             | Default  |
+| --------------------- | ----------------------- | -------- |
+| `GLOBAL_LIMITER_CAP`  | Maximum token capacity  | `50000`  |
+| `GLOBAL_LIMITER_RATE` | Tokens added per minute | `600000` |
+
+### Per-Client Rate Limiter (Sliding Window)
+
+| Variable                        | Description                            | Default |
+| ------------------------------- | -------------------------------------- | ------- |
+| `PER_CLIENT_LIMITER_CAP`        | Max number of tracked clients          | `50000` |
+| `PER_CLIENT_LIMITER_LIMIT`      | Requests allowed per window            | `10`    |
+| `PER_CLIENT_WINDOW_SECONDS`     | Window duration in seconds             | `60`    |
+| `PER_CLIENT_LIMITER_CLIENT_TTL` | Inactive client cleanup time (seconds) | `1800`  |
+
+### URL Shortener
+
+| Variable              | Description                     | Default  |
+| --------------------- | ------------------------------- | -------- |
+| `SHORTENER_CAP`       | Max stored URLs                 | `100000` |
+| `SHORTENER_TTL_HOURS` | URL expiration time (seconds)   | `3600`   |
+| `SHORT_CODE_LENGTH`   | Length of generated short codes | `4`      |
+| `MAX_URL_LENGTH`      | Maximum allowed URL length      | `4096`   |
+
 ## Live Demo
 
 [Go to pety.to for live demo](https://pety.to)
 
 ## What I learned
 
-- Making APIs thread-safe with mutexes. When different threads might need to access the same data entity as often is the case in APIs, it is necessary to use mutexes to ensure only on routine accesses the data at a time preventing race conditions.
+- **Concurrency patterns in Go:** Using RWMutex for read-heavy operations (per-client limiter) vs regular Mutex for write-heavy operations (token bucket refills). Understanding when to use channels vs shared memory with locks.
 
-- SSE is a pretty cool communication method for metrics streaming. It is pretty useful when we want the server to send data to a client on its own time.
+- **Rate limiting algorithm trade-offs:** Token bucket is memory-efficient but allows bursts; sliding window log provides precise rate limiting but requires more memory per client. Production systems need both layers to handle different threat models.
+
+- **Server-Sent Events (SSE) for real-time metrics:** SSE is ideal for one-way server→client streaming. No polling overhead (unlike REST), no bidirectional complexity (unlike WebSockets). Perfect for metrics dashboards where the server dictates update frequency.
+
+- **Graceful shutdown patterns:** Using context propagation and signal handling to ensure all resources (rate limiter goroutines, HTTP connections, test servers) clean up properly on SIGINT/SIGTERM.
 
 ## License
 
